@@ -3,6 +3,8 @@ package com.example.camera;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.util.Iterator;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -12,15 +14,35 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
+import android.support.v4.view.GestureDetectorCompat;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class MainActivity extends Activity {
     final String TAG="MainActivity";
@@ -35,6 +57,22 @@ public class MainActivity extends Activity {
 
     ImageView ivPhoto;
 
+    EditText editText;
+
+    String urlFoto;
+
+    private  GestureDetectorCompat detectorCompat = null;
+
+
+
+
+    private final OkHttpClient mOkHttpClient = new OkHttpClient();
+    private String mAccessToken ="b9d1ed1f20f04446b190f7a54ffa578c";
+    private Call mCall;
+    public static final MediaType JSON
+            = MediaType.parse("application/json; charset=utf-8");
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -42,6 +80,22 @@ public class MainActivity extends Activity {
         createDirectory();
         storage= FirebaseStorage.getInstance();
         ivPhoto = (ImageView) findViewById(R.id.ivPhoto);
+
+        editText = (EditText)findViewById(R.id.editText);
+
+        DetectSwipeListener detectSwipeListener = new DetectSwipeListener();
+        detectSwipeListener.setActivity(this);
+       detectorCompat= new GestureDetectorCompat(this,detectSwipeListener);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        detectorCompat.onTouchEvent(event);
+        return true;
+    }
+
+    public void displayMessage(String message){
+        editText.setText(message);
     }
 
     public void onClickPhoto(View view) {
@@ -99,6 +153,8 @@ public class MainActivity extends Activity {
                                             // Uri downloadUri = taskSnapshot.getMetadata().getDownloadUrl();
                                             //generatedFilePath = downloadUri.toString(); /// The string(file link) that you need
                                             Log.d(TAG, "onSuccess: "+uri.toString());
+                                            urlFoto=uri.toString();
+                                            onProf();
                                         }
                                     }).addOnFailureListener(new OnFailureListener() {
                                         @Override
@@ -154,6 +210,117 @@ public class MainActivity extends Activity {
         if (!directory.exists())
             directory.mkdirs();
     }
+
+    public void onProf() {
+        String test=" {\n" +
+                "      \"inputs\": [\n" +
+                "        {\n" +
+                "          \"data\": {\n" +
+                "            \"image\": {\n" +
+                "              \"url\": \"+urlFoto+\"\n" +
+                "            }\n" +
+                "          }\n" +
+                "        }\n" +
+                "      ]\n" +
+                "    }'";
+
+        RequestBody formBody = RequestBody.create(JSON, test);
+        final Request request = new Request.Builder()
+                .url("https://api.clarifai.com/v2/models/c0c0ac362b03416da06ab3fa36fb58e3/outputs")
+                .post(formBody)
+                .addHeader("Authorization", "Key " + mAccessToken)
+                .addHeader("Content-Type", "application/json")
+                .build();
+
+        cancelCall();
+        mCall = mOkHttpClient.newCall(request);
+        mCall.enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                setResponse("Failed to fetch data: " + e);
+            }
+
+
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                String qwe = response.body().string();
+                Log.d(TAG, "onResponse: " + qwe);
+                Log.d(TAG, "onResponse: FOTO " + urlFoto);
+
+                JsonParser parser = new JsonParser();
+                JsonElement element = parser.parse(qwe);
+                JsonObject object = element.getAsJsonObject();
+
+                JsonArray output = (JsonArray) object.getAsJsonArray("outputs");
+                Iterator it1 = output.iterator();
+                JsonObject nol = (JsonObject) it1.next();
+
+                JsonElement id = (JsonElement) nol.get("id");
+                MyFoto myFoto = new MyFoto(id.getAsString());
+                JsonObject data = (JsonObject) nol.get("data");
+                JsonArray regions = (JsonArray) data.getAsJsonArray("regions");
+                Iterator it2 = regions.iterator();
+                int i =0;
+                while (it2.hasNext()) {
+                    JsonObject regionObg = (JsonObject) it2.next();
+                    JsonObject data2 = (JsonObject) regionObg.get("data");
+                    JsonObject fase = (JsonObject) data2.get("face");
+                    Face tempFace=new Face();
+                          tempFace.setGender(getCharacteristic("gender_appearance",fase));
+                    tempFace.setAge(getCharacteristic("age_appearance",fase));
+                    tempFace.setId(String.valueOf(i));
+                    i++;
+                    myFoto.getFacescollection().add(tempFace);
+                }
+
+            }
+             String getCharacteristic(String characteristic, JsonObject node) {
+                 String result = "default";
+                 Float veroat = 0.0f;
+                 JsonObject temp = (JsonObject) node.get(characteristic);
+                 JsonArray concepts = (JsonArray) temp.getAsJsonArray("concepts");
+                 Iterator it3 = concepts.iterator();
+
+                 while (it3.hasNext()) {
+                     JsonObject arrayValue = (JsonObject) it3.next();
+                     JsonElement name = (JsonElement) arrayValue.get("name");
+                     JsonElement value = (JsonElement) arrayValue.get("value");
+                     if (Float.valueOf(value.getAsFloat()).compareTo(veroat) > 0) {
+                         result = name.getAsString();
+                         veroat = Float.valueOf(value.getAsFloat());
+                     }
+
+
+                 }
+                 return result;
+              }
+
+
+        });
+        //  cancelCall();
+//        addTarck();
+
+    }
+
+    private void cancelCall() {
+        if (mCall != null) {
+            mCall.cancel();
+        }
+    }
+
+    private void setResponse(final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+
+            }
+        });
+    }
+
+
+
+
 
 }
 
