@@ -32,6 +32,7 @@ dependencies {
     implementation 'com.clarifai.clarifai-api2:core:2.3.0'
     implementation 'com.squareup.okhttp3:okhttp:3.11.0'
     implementation 'com.google.firebase:firebase-core:16.0.9'
+    implementation 'junit:junit:4.12@jar'
 //    implementation "com.google.android.material:material:1.1.0-alpha02"
 
 }
