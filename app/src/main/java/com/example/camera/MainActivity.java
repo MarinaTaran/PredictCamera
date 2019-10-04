@@ -35,7 +35,9 @@ import com.google.gson.JsonParser;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.Assert;
 
+import clarifai2.api.ClarifaiBuilder;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -61,16 +63,20 @@ public class MainActivity extends Activity {
 
     String urlFoto;
 
+    String result ;
+    Float veroat;
+
     private  GestureDetectorCompat detectorCompat = null;
 
 
 
 
-    private final OkHttpClient mOkHttpClient = new OkHttpClient();
-    private String mAccessToken ="b9d1ed1f20f04446b190f7a54ffa578c";
-    private Call mCall;
+    private final OkHttpClient mOkHttpClient = new OkHttpClient(); //po http obrashaemsya k api
+//    private String mAccessToken ="3f46aa60f8d44778bbf7195cead28379";
+private String mAccessToken="d25b3db73e7d4bccac37cc971c5a355c" ; //na klarify
+    private Call mCall; //klass realiz interfeys call s bibliotekoy http
     public static final MediaType JSON
-            = MediaType.parse("application/json; charset=utf-8");
+            = MediaType.parse("application/json; charset=utf-8");//svoystva body ,kakoy tip bodi,sozdaem konstanta
 
 
     @Override
@@ -78,24 +84,37 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         createDirectory();
-        storage= FirebaseStorage.getInstance();
+        storage= FirebaseStorage.getInstance(); //ssilka na storage
         ivPhoto = (ImageView) findViewById(R.id.ivPhoto);
 
         editText = (EditText)findViewById(R.id.editText);
 
-        DetectSwipeListener detectSwipeListener = new DetectSwipeListener();
+//        new ClarifaiBuilder(mAccessToken)
+//                .client(new OkHttpClient()) // OPTIONAL. Allows customization of OkHttp by the user
+//                .buildSync();
+
+        DetectSwipeListener detectSwipeListener = new DetectSwipeListener();//obrabotka svaypa
         detectSwipeListener.setActivity(this);
-       detectorCompat= new GestureDetectorCompat(this,detectSwipeListener);
+       detectorCompat= new GestureDetectorCompat(this,detectSwipeListener);//obrabotchik gestov
+        Intent intent=new Intent(MainActivity.this,GetAgeGender.class);
+        intent.putExtra("qwer",result);
+
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    public boolean onTouchEvent(MotionEvent event) {//obrabotchik kasaniya
         detectorCompat.onTouchEvent(event);
         return true;
     }
 
-    public void displayMessage(String message){
-        editText.setText(message);
+    public void displayMessage(){
+if(editText.getText().equals("LET'S GUESS WHAT'S ON YOUR PHOTO")){
+    editText.setText("You can know your age");
+    Log.d(TAG, "displayMessage: "+ editText.getText() );
+}else{
+    editText.setText("LET'S GUESS WHAT'S ON YOUR PHOTO");
+}
+
     }
 
     public void onClickPhoto(View view) {
@@ -121,50 +140,36 @@ public class MainActivity extends Activity {
                     Log.d(TAG, "Photo uri: " + intent.getData());
                     Bundle bndl = intent.getExtras();
                     if (bndl != null) {
-                        Object obj = intent.getExtras().get("data");
+                        Object obj = intent.getExtras().get("data");//posilka chtob peredat foto
                         if (obj instanceof Bitmap) {
                             Bitmap bitmap = (Bitmap) obj;
                             Log.d(TAG, "bitmap " + bitmap.getWidth() + " x "
                                     + bitmap.getHeight());
                             // ivPhoto.setImageBitmap(bitmap);
                             StorageReference storageRef = storage.getReference();
-                            final StorageReference spaceRef = storageRef.child("images/space.jpg");
+                            final StorageReference spaceRef = storageRef.child("images/space.jpg");//poluchaem potok byt
                             ByteArrayOutputStream baos = new ByteArrayOutputStream();
                             bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
                             byte[] data = baos.toByteArray();
 
-                            UploadTask uploadTask = spaceRef.putBytes(data);
-                            uploadTask.addOnFailureListener(new OnFailureListener() {
+                            UploadTask uploadTask = spaceRef.putBytes(data);//zadacha po vikladivaniu foto v storage
+
+                            spaceRef.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                                @Override
+                                public void onSuccess(Uri uri) { //standartno chtob slushat chto proisxodit v moment vikladivaniya pishem listener
+                                    // Got the download URL for 'users/me/profile.png'
+                                    // Uri downloadUri = taskSnapshot.getMetadata().getDownloadUrl();
+                                    //generatedFilePath = downloadUri.toString(); /// The string(file link) that you need
+                                    Log.d(TAG, "onSuccess: "+uri.toString());
+                                    urlFoto=uri.toString();
+                                    onProf();
+                                }
+                            }).addOnFailureListener(new OnFailureListener() {
                                 @Override
                                 public void onFailure(@NonNull Exception exception) {
-                                    // Handle unsuccessful uploads
-                                }
-                            }).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
-                                @Override
-                                public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
-                                    // taskSnapshot.getMetadata() contains file metadata such as size, content-type, etc.
-                                    // ...
-                                    //Uri downloadUri = taskSnapshot.getMetadata().getDownloadUrl();
-                                    Log.d(TAG, "onSuccess:  11111111111111");
-                                    spaceRef.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
-                                        @Override
-                                        public void onSuccess(Uri uri) {
-                                            // Got the download URL for 'users/me/profile.png'
-                                            // Uri downloadUri = taskSnapshot.getMetadata().getDownloadUrl();
-                                            //generatedFilePath = downloadUri.toString(); /// The string(file link) that you need
-                                            Log.d(TAG, "onSuccess: "+uri.toString());
-                                            urlFoto=uri.toString();
-                                            onProf();
-                                        }
-                                    }).addOnFailureListener(new OnFailureListener() {
-                                        @Override
-                                        public void onFailure(@NonNull Exception exception) {
-                                            // Handle any errors
-                                        }
-                                    });
+                                    // Handle any errors
                                 }
                             });
-
                         }
                     }
                 }
@@ -178,7 +183,7 @@ public class MainActivity extends Activity {
                 if (intent == null) {
                     Log.d(TAG, "Intent is null");
                 } else {
-                    Log.d(TAG, "Video uri: " + intent.getData());
+//                    Log.d(TAG, "Video uri: " + intent.getData());
                 }
             } else if (resultCode == RESULT_CANCELED) {
                 Log.d(TAG, "Canceled");
@@ -187,6 +192,7 @@ public class MainActivity extends Activity {
     }
 
     private Uri generateFileUri(int type) {
+        System.out.println("hgsdfjgsdhjadd");
         File file = null;
         switch (type) {
             case TYPE_PHOTO:
@@ -209,28 +215,47 @@ public class MainActivity extends Activity {
                 "MyFolder");
         if (!directory.exists())
             directory.mkdirs();
+        Log.d(TAG, "createDirectory: "+directory.toString());
     }
 
     public void onProf() {
+//        String test ="{\n" +
+//                "      \"inputs\": [\n" +
+//                "        {\n" +
+//                "          \"data\": {\n" +
+//                "            \"image\": {\n" +
+//                "              \"url\": \"urlFoto\n" +
+//                "            }\n" +
+//                "          }\n" +
+//                "        }\n" +
+//                "      ]\n" +
+//                "    }'";
         String test=" {\n" +
                 "      \"inputs\": [\n" +
                 "        {\n" +
                 "          \"data\": {\n" +
                 "            \"image\": {\n" +
-                "              \"url\": \"+urlFoto+\"\n" +
+                "              \"url\": \""+urlFoto+"\"\n" +
                 "            }\n" +
                 "          }\n" +
                 "        }\n" +
                 "      ]\n" +
                 "    }'";
+//        String json = "{ \"name\": \"Baeldung\", \"java\": true }";
+        Log.d(TAG, "onProf: " + test);
+        //JsonObject jsonObject = new JsonParser().parse(test).getAsJsonObject();
+
+//        Assert.assertTrue(jsonObject.isJsonObject());
+//        Assert.assertTrue(jsonObject.get("url").getAsString().equals(urlFoto));
 
         RequestBody formBody = RequestBody.create(JSON, test);
         final Request request = new Request.Builder()
                 .url("https://api.clarifai.com/v2/models/c0c0ac362b03416da06ab3fa36fb58e3/outputs")
                 .post(formBody)
-                .addHeader("Authorization", "Key " + mAccessToken)
-                .addHeader("Content-Type", "application/json")
+                .addHeader("authorization", "Key " + mAccessToken)
+                .addHeader("content-type", "application/json")
                 .build();
+        Log.d(TAG, "onProf: !!!!!!!!!!!!!"+ request);
 
         cancelCall();
         mCall = mOkHttpClient.newCall(request);
@@ -244,8 +269,8 @@ public class MainActivity extends Activity {
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                String qwe = response.body().string();
-                Log.d(TAG, "onResponse: " + qwe);
+                String qwe = response.body().string();//otvet na zapros request
+                Log.d(TAG, "onResponse: ****" + qwe);
                 Log.d(TAG, "onResponse: FOTO " + urlFoto);
 
                 JsonParser parser = new JsonParser();
@@ -289,14 +314,11 @@ public class MainActivity extends Activity {
                      if (Float.valueOf(value.getAsFloat()).compareTo(veroat) > 0) {
                          result = name.getAsString();
                          veroat = Float.valueOf(value.getAsFloat());
+                         Log.d(TAG, "getCharacteristic: !!!!!!!!!!!!!!!!!!!!" + result + veroat + name + value);
                      }
-
-
                  }
                  return result;
-              }
-
-
+            }
         });
         //  cancelCall();
 //        addTarck();
